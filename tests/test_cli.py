@@ -1,4 +1,8 @@
-import sys, pathlib; sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+import sys
+import pathlib
+TEST_DIR = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(TEST_DIR / "stubs"))
+sys.path.insert(0, str(TEST_DIR.parent))
 from typer.testing import CliRunner
 import cmdgen
 
@@ -8,7 +12,7 @@ def dummy_load_api_key(settings):
     return "testkey"
 
 def dummy_make_api_request(settings, api_key, prompt):
-    return cmdgen.APIResponse(output=[{"content": [{"text": "echo test"}]}])
+    return cmdgen.APIResponse(output=[{"content": [{"text": "echo test"}]}], usage={"tokens": 1})
 
 class DummyHistory:
     def append_string(self, text):
@@ -54,6 +58,15 @@ class CallCounter:
 
     def __call__(self, *args, **kwargs):
         self.count += 1
+
+
+def test_stats_flag(monkeypatch):
+    setup(monkeypatch)
+    counter = CallCounter()
+    monkeypatch.setattr(cmdgen, "display_stats", counter)
+    monkeypatch.setattr(cmdgen, "is_terminal", lambda: True)
+    runner.invoke(cmdgen.app, ["--prompt", "test", "--stats"])
+    assert counter.count == 1
 
 
 def test_trim_history_called_with_prompt(monkeypatch):
