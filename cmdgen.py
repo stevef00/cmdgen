@@ -29,7 +29,6 @@ class Settings(BaseModel):
     history_file: Path = Field(default=Path.home() / '.cmdgen_history')
     max_history: int = Field(default=1000)
     model: str = Field(default='gpt-4o')
-    api_url: str = Field(default='https://api.openai.com/v1/responses')
     developer_prompt: str = Field(
         default='Output a shell command to satisfy the user prompt. '
                 'Do not include any markdown in the output, just the command. '
@@ -49,7 +48,6 @@ def load_settings() -> Settings:
         history_file=os.getenv('HISTORY_FILE', str(Path.home() / '.cmdgen_history')),
         max_history=int(os.getenv('MAX_HISTORY', '1000')),
         model=os.getenv('MODEL', 'gpt-4o'),
-        api_url=os.getenv('API_URL', 'https://api.openai.com/v1/responses'),
         developer_prompt=os.getenv('DEVELOPER_PROMPT', Settings().developer_prompt)
     )
 
@@ -96,7 +94,7 @@ def trim_history(settings: Settings) -> None:
 def make_api_request(settings: Settings, api_key: str, prompt: str) -> APIResponse:
     """Make the OpenAI API request and return the response."""
     try:
-        client = openai.OpenAI(api_key=api_key, base_url=settings.api_url)
+        client = openai.OpenAI(api_key=api_key)
         resp = client.responses.create(
             model=settings.model,
             input=[

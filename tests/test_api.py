@@ -24,7 +24,7 @@ def test_make_api_request_uses_openai(monkeypatch):
     def openai_factory(**kwargs):
         return dummy_client
     monkeypatch.setattr(cmdgen.openai, "OpenAI", openai_factory)
-    resp = cmdgen.make_api_request(cmdgen.Settings(api_url="url", model="model"), "key", "prompt")
+    resp = cmdgen.make_api_request(cmdgen.Settings(model="model"), "key", "prompt")
     assert isinstance(resp, cmdgen.APIResponse)
     assert dummy_client.created_with["model"] == "model"
     assert dummy_client.created_with["input"][1]["content"] == "prompt"
