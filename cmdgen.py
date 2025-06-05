@@ -193,7 +193,6 @@ def main(
         "--quiet",
         "-q",
         help="Minimal output (no borders, no progress)",
-        is_flag=True,
     )
 ):
     """Ask for a shell command from OpenAI based on a prompt."""
