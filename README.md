@@ -96,7 +96,6 @@ The following environment variables can be set to customize the tool's behavior:
 - `HISTORY_FILE`: Path to the history file (default: `~/.cmdgen_history`)
 - `MAX_HISTORY`: Maximum number of history entries to keep (default: `1000`)
 - `MODEL`: OpenAI model to use (default: `gpt-4o`)
-- `API_URL`: OpenAI API URL (default: `https://api.openai.com/v1/responses`)
 - `DEVELOPER_PROMPT`: Custom developer prompt
 
 ### History
