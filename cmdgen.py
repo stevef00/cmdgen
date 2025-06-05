@@ -189,16 +189,16 @@ def main(
         help="Provide prompt directly (bypasses terminal input)"
     ),
     quiet: bool = typer.Option(
-        None,
+        False,
         "--quiet",
         "-q",
-        help="Minimal output (no borders, no progress)"
+        help="Minimal output (no borders, no progress)",
+        is_flag=True,
     )
 ):
     """Ask for a shell command from OpenAI based on a prompt."""
-    # Set quiet mode if stdout is not a terminal or --quiet is specified
-    if quiet is None:
-        quiet = not is_terminal()
+    # Enable quiet mode when stdout is not a terminal or --quiet is specified
+    quiet = quiet or not is_terminal()
 
     settings = load_settings()
     api_key = load_api_key(settings)
