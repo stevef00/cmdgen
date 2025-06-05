@@ -124,6 +124,41 @@ def make_api_request(settings: Settings, api_key: str, prompt: object) -> APIRes
         console.print(f"[red]Error: Failed to contact OpenAI: {e}[/red]")
         sys.exit(1)
 
+def _parse_usage(usage: dict) -> Dict[str, int]:
+    """Normalize usage fields from the API into prompt/completion/cached/total."""
+    prompt_tokens = usage.get("prompt_tokens")
+    completion_tokens = usage.get("completion_tokens")
+    cached_tokens = usage.get("cached_tokens")
+    total_tokens = usage.get("total_tokens")
+
+    if prompt_tokens is None:
+        prompt_tokens = usage.get("input_tokens", usage.get("tokens", 0))
+
+    if completion_tokens is None:
+        completion_tokens = usage.get("output_tokens", 0)
+
+    if cached_tokens is None:
+        cached_tokens = usage.get("input_tokens_details", {}).get("cached_tokens", 0)
+
+    if total_tokens is None:
+        total_tokens = usage.get("tokens", 0)
+
+    return {
+        "prompt_tokens": int(prompt_tokens or 0),
+        "completion_tokens": int(completion_tokens or 0),
+        "cached_tokens": int(cached_tokens or 0),
+        "total_tokens": int(total_tokens or 0),
+    }
+
+
+def _format_stats(usage: Dict[str, int]) -> str:
+    return (
+        f"tokens: prompt={usage['prompt_tokens']}  "
+        f"completion={usage['completion_tokens']}  "
+        f"cached={usage['cached_tokens']}  total={usage['total_tokens']}"
+    )
+
+
 def display_stats(usage: Optional[dict], level: str = "basic") -> None:
     """Display token usage statistics."""
     if not usage:
@@ -134,13 +169,8 @@ def display_stats(usage: Optional[dict], level: str = "basic") -> None:
         console.print(json.dumps(usage, indent=2))
         return
 
-    prompt_tokens = usage.get("prompt_tokens", 0)
-    completion_tokens = usage.get("completion_tokens", 0)
-    cached_tokens = usage.get("cached_tokens", 0)
-    total_tokens = usage.get("total_tokens", 0)
-    console.print(
-        f"tokens: prompt={prompt_tokens}  completion={completion_tokens}  cached={cached_tokens}  total={total_tokens}"
-    )
+    parsed = _parse_usage(usage)
+    console.print(_format_stats(parsed))
 
 def copy_to_tmux_buffer(text: str) -> None:
     """Copy text to tmux paste buffer."""
@@ -174,9 +204,9 @@ def copy_to_x11_clipboard(text: str) -> None:
 
 def update_stats(cumulative: Dict[str, int], usage: Dict[str, int]) -> None:
     """Update cumulative statistics."""
-    for k, v in usage.items():
-        if isinstance(v, int):
-            cumulative[k] = cumulative.get(k, 0) + v
+    parsed = _parse_usage(usage)
+    for k, v in parsed.items():
+        cumulative[k] = cumulative.get(k, 0) + v
 
 def run_repl(
     settings: Settings,
@@ -270,20 +300,23 @@ def run_repl(
         ]
         summary_resp = make_api_request(settings, api_key, summary_prompt)
         summary = summary_resp.output[0]["content"][0]["text"].splitlines()[0]
+        if stats_level and summary_resp.usage:
+            display_stats(summary_resp.usage, stats_level)
+            update_stats(cumulative, summary_resp.usage)
         with open(settings.history_file, "a") as f:
             f.write(f"\n# {datetime.now().isoformat()}\n+{summary}\n")
         trim_history(settings)
 
     if stats_level and cumulative:
-        display_stats(cumulative, stats_level)
+        console.print("summary: " + _format_stats(_parse_usage(cumulative)))
 
 @app.command()
 def main(
-    stats: bool = typer.Option(
-        False,
+    stats: Optional[str] = typer.Option(
+        None,
         "--stats",
         "-s",
-        help="Show token usage statistics",
+        help="Show token usage statistics (basic or debug)",
     ),
     tmux: bool = typer.Option(
         False,
@@ -336,7 +369,7 @@ def main(
             run_repl(
                 settings,
                 api_key,
-                'basic' if stats else None,
+                stats,
                 quiet,
                 tmux,
                 xsel,
@@ -371,7 +404,7 @@ def main(
             console.print(Panel(command, title="Generated Command", border_style="green"))
 
         if stats and result.usage and not quiet:
-            display_stats(result.usage, 'basic')
+            display_stats(result.usage, stats)
 
     except KeyboardInterrupt:
         if not quiet:
