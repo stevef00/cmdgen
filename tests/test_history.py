@@ -21,3 +21,11 @@ def test_trim_history_no_change(tmp_path):
     settings = cmdgen.Settings(history_file=history_file, max_history=5)
     cmdgen.trim_history(settings)
     assert history_file.read_text().splitlines() == lines
+
+
+def test_setup_prompt_session_filters_prompts(tmp_path):
+    histfile = tmp_path / "hist"
+    histfile.write_text("\n# ts1\n+foo\n\n# ts2\n+bar\n")
+    settings = cmdgen.Settings(history_file=histfile)
+    session = cmdgen.setup_prompt_session(settings, persistent=False)
+    assert session.history.get_strings() == ["foo", "bar"]

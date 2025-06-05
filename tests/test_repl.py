@@ -139,8 +139,9 @@ def test_repl_history_summary_written(monkeypatch, tmp_path):
     settings = cmdgen.Settings(history_file=tmp_path / "hist")
     cmdgen.run_repl(settings, "key", None, True, False, False)
     lines = settings.history_file.read_text().splitlines()
-    assert lines[0].startswith("# ")
-    assert lines[1] == "+summary line"
+    assert lines[0] == ""
+    assert lines[1].startswith("# ")
+    assert lines[2] == "+summary line"
 
 
 def test_repl_summary_uses_context(monkeypatch, tmp_path):
