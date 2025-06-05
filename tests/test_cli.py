@@ -40,6 +40,13 @@ def test_quiet_output(monkeypatch):
     result = runner.invoke(cmdgen.app, ["--quiet", "--prompt", "test"])
     assert "echo test" in result.stdout
 
+def test_quiet_auto_when_not_terminal(monkeypatch):
+    setup(monkeypatch)
+    monkeypatch.setattr(cmdgen, "is_terminal", lambda: False)
+    result = runner.invoke(cmdgen.app, ["--prompt", "test"])
+    assert result.exit_code == 0
+    assert "echo test" in result.stdout
+    assert "Generated Command" not in result.stdout
 
 class CallCounter:
     def __init__(self):

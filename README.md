@@ -14,7 +14,7 @@ or consult documentation.
   - Copy to X11 clipboard
   - Direct command line output
 - Token usage statistics
-- Quiet mode for scripting
+- Quiet mode for scripting (automatically enabled when output is not a terminal)
 - Direct prompt input for automation
 
 ## Installation
@@ -53,7 +53,7 @@ request in natural language.
 - `-t, --tmux`: Copy command to tmux paste buffer
 - `-x, --xsel`: Copy command to X11 clipboard
 - `-p, --prompt TEXT`: Provide prompt directly (bypasses terminal input)
-- `-q, --quiet`: Minimal output (no borders, no progress)
+- `-q, --quiet`: Minimal output (no borders, no progress). Automatically enabled when piping output.
 
 ### Examples
 
@@ -79,13 +79,13 @@ request in natural language.
 
 5. Use in a script:
 ```bash
-command=$(./cmdgen.py -q -p "list processes")
+command=$(./cmdgen.py -p "list processes")
 echo "Generated command: $command"
 ```
 
 6. Pipe to another command:
 ```bash
-./cmdgen.py -q -p "find files" | xargs -I {} sh -c "{}"
+./cmdgen.py -p "find files" | xargs -I {} sh -c "{}"
 ```
 
 ### Environment Variables
