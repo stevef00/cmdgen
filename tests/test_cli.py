@@ -21,10 +21,12 @@ class DummyHistory:
 class DummySession:
     def __init__(self):
         self.history = DummyHistory()
+        self.calls = 0
     def prompt(self, *args, **kwargs):
-        return "test"
+        self.calls += 1
+        return "test" if self.calls == 1 else "exit"
 
-def dummy_setup_prompt_session(settings):
+def dummy_setup_prompt_session(settings, *args, **kwargs):
     return DummySession()
 
 def setup(monkeypatch):

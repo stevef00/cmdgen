@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 import os
 import sys
+import json
+import time
+import signal
 import openai
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict
+from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 from prompt_toolkit import PromptSession
-from prompt_toolkit.history import FileHistory
+from prompt_toolkit.history import FileHistory, InMemoryHistory
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import typer
@@ -73,10 +77,17 @@ def load_api_key(settings: Settings) -> str:
     check_api_key_permissions(settings.api_key_path)
     return settings.api_key_path.read_text().strip()
 
-def setup_prompt_session(settings: Settings) -> PromptSession:
+def setup_prompt_session(settings: Settings, persistent: bool = True) -> PromptSession:
     """Set up the prompt session with history."""
     settings.history_file.parent.mkdir(parents=True, exist_ok=True)
-    return PromptSession(history=FileHistory(str(settings.history_file)))
+    if persistent:
+        return PromptSession(history=FileHistory(str(settings.history_file)))
+    # Load history for in-memory use only
+    hist = InMemoryHistory()
+    if settings.history_file.exists():
+        for line in settings.history_file.read_text().splitlines():
+            hist.append_string(line)
+    return PromptSession(history=hist)
 
 def trim_history(settings: Settings) -> None:
     """Keep only the last ``settings.max_history`` lines in the history file."""
@@ -91,37 +102,43 @@ def trim_history(settings: Settings) -> None:
             "\n".join(lines[-settings.max_history:]) + "\n"
         )
 
-def make_api_request(settings: Settings, api_key: str, prompt: str) -> APIResponse:
+def make_api_request(settings: Settings, api_key: str, prompt: object) -> APIResponse:
     """Make the OpenAI API request and return the response."""
     try:
         client = openai.OpenAI(api_key=api_key)
+        if isinstance(prompt, list):
+            messages = [{'role': 'system', 'content': settings.developer_prompt}] + prompt
+        else:
+            messages = [
+                {'role': 'developer', 'content': settings.developer_prompt},
+                {'role': 'user', 'content': str(prompt)}
+            ]
         resp = client.responses.create(
             model=settings.model,
-            input=[
-                {'role': 'developer', 'content': settings.developer_prompt},
-                {'role': 'user', 'content': prompt}
-            ]
+            input=messages
         )
         return APIResponse(**resp.model_dump())
     except Exception as e:
         console.print(f"[red]Error: Failed to contact OpenAI: {e}[/red]")
         sys.exit(1)
 
-def display_stats(usage: Optional[dict]) -> None:
+def display_stats(usage: Optional[dict], level: str = "basic") -> None:
     """Display token usage statistics."""
     if not usage:
         console.print("[yellow]Token statistics not available in API response.[/yellow]")
         return
 
-    table = Table(title="Token Usage")
-    table.add_column("Type", style="cyan")
-    table.add_column("Count", style="green")
+    if level == "debug":
+        console.print(json.dumps(usage, indent=2))
+        return
 
-    for key, value in usage.items():
-        if value is not None:
-            table.add_row(key.replace('_', ' ').title(), str(value))
-
-    console.print(table)
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+    cached_tokens = usage.get("cached_tokens", 0)
+    total_tokens = usage.get("total_tokens", 0)
+    console.print(
+        f"tokens: prompt={prompt_tokens}  completion={completion_tokens}  cached={cached_tokens}  total={total_tokens}"
+    )
 
 def copy_to_tmux_buffer(text: str) -> None:
     """Copy text to tmux paste buffer."""
@@ -153,13 +170,112 @@ def copy_to_x11_clipboard(text: str) -> None:
     except FileNotFoundError:
         console.print("[yellow]Warning: xsel command not found[/yellow]")
 
+def update_stats(cumulative: Dict[str, int], usage: Dict[str, int]) -> None:
+    """Update cumulative statistics."""
+    for k, v in usage.items():
+        if isinstance(v, int):
+            cumulative[k] = cumulative.get(k, 0) + v
+
+def run_repl(
+    settings: Settings,
+    api_key: str,
+    stats_level: Optional[str],
+    quiet: bool,
+    tmux: bool = False,
+    xsel: bool = False,
+) -> None:
+    """Run the interactive REPL loop."""
+    session = setup_prompt_session(settings, persistent=False)
+    transcript: List[Dict[str, str]] = []
+    cumulative: Dict[str, int] = {}
+
+    in_request = False
+    last_sigint = 0.0
+
+    def handle_sigint(signum, frame):
+        nonlocal last_sigint, in_request
+        now = time.time()
+        if in_request:
+            raise KeyboardInterrupt
+        if now - last_sigint < 1:
+            raise typer.Exit()
+        last_sigint = now
+        console.print("\nPress Ctrl-C again to exit")
+
+    signal.signal(signal.SIGINT, handle_sigint)
+
+    while True:
+        try:
+            text = session.prompt("prompt> ").strip()
+        except EOFError:
+            break
+
+        if text in {"exit", "quit"}:
+            break
+        if not text:
+            continue
+
+        if text.startswith(":"):
+            cmd = text[1:]
+            if cmd == "stats":
+                display_stats(cumulative, stats_level or "basic")
+            elif cmd == "undo":
+                if len(transcript) >= 2:
+                    transcript.pop()
+                    transcript.pop()
+                else:
+                    console.print("[yellow]Nothing to undo[/yellow]")
+            elif cmd == "help":
+                console.print(":stats :undo :help exit quit")
+            else:
+                console.print(f"[yellow]Unknown command: {cmd}[/yellow]")
+            continue
+
+        transcript.append({"role": "user", "content": text})
+        try:
+            in_request = True
+            if not quiet:
+                with console.status("[bold green]Waiting for OpenAI response..."):
+                    result = make_api_request(settings, api_key, transcript)
+            else:
+                result = make_api_request(settings, api_key, transcript)
+        finally:
+            in_request = False
+
+        command = result.output[0]["content"][0]["text"]
+        transcript.append({"role": "assistant", "content": command})
+
+        if tmux:
+            copy_to_tmux_buffer(command)
+        if xsel:
+            copy_to_x11_clipboard(command)
+
+        if quiet:
+            print(command)
+        else:
+            console.print(Panel(command, title="Generated Command", border_style="green"))
+
+        if stats_level and result.usage:
+            display_stats(result.usage, stats_level)
+            update_stats(cumulative, result.usage)
+
+    if transcript:
+        summary_resp = make_api_request(settings, api_key, "Summarize the prompt that produced the final command. One line, no markdown.")
+        summary = summary_resp.output[0]["content"][0]["text"].splitlines()[0]
+        with open(settings.history_file, "a") as f:
+            f.write(f"# {datetime.now().isoformat()}\n+{summary}\n")
+        trim_history(settings)
+
+    if stats_level and cumulative:
+        display_stats(cumulative, stats_level)
+
 @app.command()
 def main(
     stats: bool = typer.Option(
         False,
         "--stats",
         "-s",
-        help="Show token usage statistics"
+        help="Show token usage statistics",
     ),
     tmux: bool = typer.Option(
         False,
@@ -173,11 +289,17 @@ def main(
         "-x",
         help="Copy command to X11 clipboard"
     ),
+    interactive: bool = typer.Option(
+        False,
+        "--interactive",
+        "-i",
+        help="Start a REPL loop (cannot be used with --prompt/-p)"
+    ),
     prompt: Optional[str] = typer.Option(
         None,
         "--prompt",
         "-p",
-        help="Provide prompt directly (bypasses terminal input)"
+        help="One-shot generation (cannot be used with --interactive)"
     ),
     quiet: bool = typer.Option(
         False,
@@ -190,25 +312,36 @@ def main(
     # Enable quiet mode when stdout is not a terminal or --quiet is specified
     quiet = quiet or not is_terminal()
 
+    if interactive and prompt is not None:
+        console.print("error: --interactive and --prompt are mutually exclusive", style="red")
+        raise typer.Exit(code=1)
+
+    if prompt is None and not interactive:
+        interactive = True
+
     settings = load_settings()
     api_key = load_api_key(settings)
     session = setup_prompt_session(settings)
 
     try:
-        # Get prompt either from command line or terminal
-        if prompt is None:
-            prompt = session.prompt("prompt> ").strip()
-        else:
-            prompt = prompt.strip()
-            # Add to history even when provided via command line
-            session.history.append_string(prompt)
+        if interactive:
+            run_repl(
+                settings,
+                api_key,
+                'basic' if stats else None,
+                quiet,
+                tmux,
+                xsel,
+            )
+            return
 
-        # Trim history after each entry regardless of how the prompt was provided
+        prompt = prompt.strip()
+        session.history.append_string(prompt)
         trim_history(settings)
 
         if not prompt:
             console.print("[red]Error: Empty prompt[/red]", file=sys.stderr)
-            sys.exit(1)
+            raise typer.Exit(1)
 
         if not quiet:
             with console.status("[bold green]Waiting for OpenAI response..."):
@@ -218,36 +351,30 @@ def main(
 
         command = result.output[0]['content'][0]['text']
 
-        # Copy to tmux buffer if requested
         if tmux:
             copy_to_tmux_buffer(command)
 
-        # Copy to X11 clipboard if requested
         if xsel:
             copy_to_x11_clipboard(command)
 
-        # Display the command
         if quiet:
             print(command)
         else:
-            console.print(Panel(command,
-                              title="Generated Command",
-                              border_style="green"))
+            console.print(Panel(command, title="Generated Command", border_style="green"))
 
-        # Display stats only if --stats flag is used and not in quiet mode
         if stats and result.usage and not quiet:
-            display_stats(result.usage)
+            display_stats(result.usage, 'basic')
 
     except KeyboardInterrupt:
         if not quiet:
             console.print("\n[yellow]Operation cancelled by user[/yellow]")
-        sys.exit(0)
+        raise typer.Exit(0)
     except Exception as e:
         if not quiet:
             console.print(f"[red]Error: {e}[/red]")
         else:
             print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        raise typer.Exit(1)
 
 if __name__ == '__main__':
     app()
