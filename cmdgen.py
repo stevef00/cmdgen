@@ -295,7 +295,7 @@ def run_repl(
         summary_prompt = transcript + [
             {
                 "role": "user",
-                "content": "Summarize the prompt that produced the final command. One line, no markdown."
+                "content": "Summarize the prompt that produced the final command. Use the imperative (ex. 'run...', 'list...', 'find...'). One line, no markdown."
             }
         ]
         summary_resp = make_api_request(settings, api_key, summary_prompt)
