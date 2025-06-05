@@ -12,7 +12,10 @@ def dummy_load_api_key(settings):
     return "testkey"
 
 def dummy_make_api_request(settings, api_key, prompt):
-    return cmdgen.APIResponse(output=[{"content": [{"text": "echo test"}]}], usage={"tokens": 1})
+    return cmdgen.APIResponse(
+        output=[{"content": [{"text": "echo test"}]}],
+        usage={"input_tokens": 1, "output_tokens": 0, "input_tokens_details": {"cached_tokens": 0}, "total_tokens": 1},
+    )
 
 class DummyHistory:
     def append_string(self, text):
@@ -67,7 +70,17 @@ def test_stats_flag(monkeypatch):
     counter = CallCounter()
     monkeypatch.setattr(cmdgen, "display_stats", counter)
     monkeypatch.setattr(cmdgen, "is_terminal", lambda: True)
-    runner.invoke(cmdgen.app, ["--prompt", "test", "--stats"])
+    runner.invoke(cmdgen.app, ["--prompt", "test", "--stats=basic"])
+    assert counter.count == 1
+
+
+def test_stats_debug(monkeypatch):
+    setup(monkeypatch)
+    counter = CallCounter()
+    monkeypatch.setattr(cmdgen, "display_stats", counter)
+    monkeypatch.setattr(cmdgen, "is_terminal", lambda: True)
+    result = runner.invoke(cmdgen.app, ["--prompt", "test", "--stats=debug"])
+    assert result.exit_code == 0
     assert counter.count == 1
 
 

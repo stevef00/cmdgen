@@ -9,7 +9,15 @@ class DummyResponse:
     def __init__(self):
         self.called = False
     def model_dump(self):
-        return {"output": [{"content": [{"text": "cmd"}]}], "usage": {"tokens": 1}}
+        return {
+            "output": [{"content": [{"text": "cmd"}]}],
+            "usage": {
+                "input_tokens": 1,
+                "output_tokens": 0,
+                "input_tokens_details": {"cached_tokens": 0},
+                "total_tokens": 1,
+            },
+        }
 
 class DummyClient:
     def __init__(self):

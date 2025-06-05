@@ -68,7 +68,12 @@ def test_cli_invokes_repl_by_default(monkeypatch):
 
 
 def test_repl_stats_output(monkeypatch, tmp_path):
-    usage = {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3, "cached_tokens": 0}
+    usage = {
+        "input_tokens": 1,
+        "output_tokens": 2,
+        "input_tokens_details": {"cached_tokens": 0},
+        "total_tokens": 3,
+    }
     inputs = ["foo", "exit"]
     setup_common(monkeypatch, inputs)
     stats_calls = []
