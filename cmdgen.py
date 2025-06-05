@@ -260,7 +260,13 @@ def run_repl(
             update_stats(cumulative, result.usage)
 
     if transcript:
-        summary_resp = make_api_request(settings, api_key, "Summarize the prompt that produced the final command. One line, no markdown.")
+        summary_prompt = transcript + [
+            {
+                "role": "user",
+                "content": "Summarize the prompt that produced the final command. One line, no markdown."
+            }
+        ]
+        summary_resp = make_api_request(settings, api_key, summary_prompt)
         summary = summary_resp.output[0]["content"][0]["text"].splitlines()[0]
         with open(settings.history_file, "a") as f:
             f.write(f"# {datetime.now().isoformat()}\n+{summary}\n")

@@ -129,7 +129,9 @@ def test_repl_history_summary_written(monkeypatch, tmp_path):
     setup_common(monkeypatch, inputs)
 
     def fake_api_request(settings, api_key, prompt):
-        if isinstance(prompt, str):
+        if isinstance(prompt, list) and any(
+            "Summarize" in p.get("content", "") for p in prompt if isinstance(p, dict)
+        ):
             return cmdgen.APIResponse(output=[{"content": [{"text": "summary line"}]}])
         return cmdgen.APIResponse(output=[{"content": [{"text": "cmd"}]}])
 
@@ -139,4 +141,29 @@ def test_repl_history_summary_written(monkeypatch, tmp_path):
     lines = settings.history_file.read_text().splitlines()
     assert lines[0].startswith("# ")
     assert lines[1] == "+summary line"
+
+
+def test_repl_summary_uses_context(monkeypatch, tmp_path):
+    inputs = ["foo", "exit"]
+    setup_common(monkeypatch, inputs)
+
+    calls = []
+
+    def fake_api_request(settings, api_key, prompt):
+        calls.append(prompt)
+        if len(calls) == 1:
+            assert isinstance(prompt, list)
+            return cmdgen.APIResponse(output=[{"content": [{"text": "cmd"}]}])
+        elif len(calls) == 2:
+            assert isinstance(prompt, list)
+            # ensure summary prompt includes instruction
+            assert "Summarize" in prompt[-1]["content"]
+            return cmdgen.APIResponse(output=[{"content": [{"text": "summary"}]}])
+        else:
+            raise AssertionError("Unexpected API call")
+
+    monkeypatch.setattr(cmdgen, "make_api_request", fake_api_request)
+    settings = cmdgen.Settings(history_file=tmp_path / "hist")
+    cmdgen.run_repl(settings, "key", None, True, False, False)
+    assert len(calls) == 2
 
