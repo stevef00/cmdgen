@@ -39,3 +39,27 @@ def test_quiet_output(monkeypatch):
     setup(monkeypatch)
     result = runner.invoke(cmdgen.app, ["--quiet", "--prompt", "test"])
     assert "echo test" in result.stdout
+
+
+class CallCounter:
+    def __init__(self):
+        self.count = 0
+
+    def __call__(self, *args, **kwargs):
+        self.count += 1
+
+
+def test_trim_history_called_with_prompt(monkeypatch):
+    setup(monkeypatch)
+    counter = CallCounter()
+    monkeypatch.setattr(cmdgen, "trim_history", counter)
+    runner.invoke(cmdgen.app, ["--prompt", "test"])
+    assert counter.count == 1
+
+
+def test_trim_history_called_interactive(monkeypatch):
+    setup(monkeypatch)
+    counter = CallCounter()
+    monkeypatch.setattr(cmdgen, "trim_history", counter)
+    runner.invoke(cmdgen.app, [])
+    assert counter.count == 1
