@@ -82,11 +82,13 @@ def setup_prompt_session(settings: Settings, persistent: bool = True) -> PromptS
     settings.history_file.parent.mkdir(parents=True, exist_ok=True)
     if persistent:
         return PromptSession(history=FileHistory(str(settings.history_file)))
-    # Load history for in-memory use only
+
+    # Load history for in-memory use only and filter out non-prompt lines.
     hist = InMemoryHistory()
     if settings.history_file.exists():
         for line in settings.history_file.read_text().splitlines():
-            hist.append_string(line)
+            if line.startswith("+"):
+                hist.append_string(line[1:])
     return PromptSession(history=hist)
 
 def trim_history(settings: Settings) -> None:
@@ -269,7 +271,7 @@ def run_repl(
         summary_resp = make_api_request(settings, api_key, summary_prompt)
         summary = summary_resp.output[0]["content"][0]["text"].splitlines()[0]
         with open(settings.history_file, "a") as f:
-            f.write(f"# {datetime.now().isoformat()}\n+{summary}\n")
+            f.write(f"\n# {datetime.now().isoformat()}\n+{summary}\n")
         trim_history(settings)
 
     if stats_level and cumulative:
