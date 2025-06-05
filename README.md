@@ -94,7 +94,7 @@ The following environment variables can be set to customize the tool's behavior:
 
 - `API_KEY_PATH`: Path to the API key file (default: `~/.cmdgen_apikey`)
 - `HISTORY_FILE`: Path to the history file (default: `~/.cmdgen_history`)
-- `MAX_HISTORY`: Maximum number of history entries (default: `1000`)
+- `MAX_HISTORY`: Maximum number of history entries to keep (default: `1000`)
 - `MODEL`: OpenAI model to use (default: `gpt-4o`)
 - `API_URL`: OpenAI API URL (default: `https://api.openai.com/v1/responses`)
 - `DEVELOPER_PROMPT`: Custom developer prompt
@@ -104,6 +104,7 @@ The following environment variables can be set to customize the tool's behavior:
 The tool maintains a history of your prompts in `~/.cmdgen_history`.
 You can use the up/down arrow keys to cycle through previous prompts
 when in interactive mode.
+The file is automatically trimmed to the last `MAX_HISTORY` entries.
 
 ## Dependencies
 

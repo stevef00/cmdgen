@@ -81,6 +81,19 @@ def setup_prompt_session(settings: Settings) -> PromptSession:
     settings.history_file.parent.mkdir(parents=True, exist_ok=True)
     return PromptSession(history=FileHistory(str(settings.history_file)))
 
+def trim_history(settings: Settings) -> None:
+    """Keep only the last ``settings.max_history`` lines in the history file."""
+    try:
+        lines = settings.history_file.read_text().splitlines()
+    except FileNotFoundError:
+        return
+
+    if len(lines) > settings.max_history:
+        # Write back only the most recent entries so the file doesn't grow
+        settings.history_file.write_text(
+            "\n".join(lines[-settings.max_history:]) + "\n"
+        )
+
 def make_api_request(settings: Settings, api_key: str, prompt: str) -> APIResponse:
     """Make the OpenAI API request and return the response."""
     headers = {
@@ -199,6 +212,9 @@ def main(
             prompt = prompt.strip()
             # Add to history even when provided via command line
             session.history.append_string(prompt)
+
+        # Trim history after each entry regardless of how the prompt was provided
+        trim_history(settings)
 
         if not prompt:
             console.print("[red]Error: Empty prompt[/red]", file=sys.stderr)
