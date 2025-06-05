@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
-import json
-import requests
+import openai
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -96,23 +95,17 @@ def trim_history(settings: Settings) -> None:
 
 def make_api_request(settings: Settings, api_key: str, prompt: str) -> APIResponse:
     """Make the OpenAI API request and return the response."""
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {api_key}',
-    }
-    data = {
-        'model': settings.model,
-        'input': [
-            {'role': 'developer', 'content': settings.developer_prompt},
-            {'role': 'user', 'content': prompt}
-        ]
-    }
-
     try:
-        resp = requests.post(settings.api_url, headers=headers, data=json.dumps(data))
-        resp.raise_for_status()
-        return APIResponse(**resp.json())
-    except requests.exceptions.RequestException as e:
+        client = openai.OpenAI(api_key=api_key, base_url=settings.api_url)
+        resp = client.responses.create(
+            model=settings.model,
+            input=[
+                {'role': 'developer', 'content': settings.developer_prompt},
+                {'role': 'user', 'content': prompt}
+            ]
+        )
+        return APIResponse(**resp.model_dump())
+    except Exception as e:
         console.print(f"[red]Error: Failed to contact OpenAI: {e}[/red]")
         sys.exit(1)
 

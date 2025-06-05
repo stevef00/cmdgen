@@ -1,3 +1,8 @@
+import sys
+import pathlib
+TEST_DIR = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(TEST_DIR / "stubs"))
+sys.path.insert(0, str(TEST_DIR.parent))
 import cmdgen
 
 def test_trim_history_truncates(tmp_path):

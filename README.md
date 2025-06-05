@@ -113,7 +113,7 @@ The file is automatically trimmed to the last `MAX_HISTORY` entries.
 - prompt_toolkit
 - pydantic
 - python-dotenv
-- requests
+- openai
 - typer
 - xsel (for X11 clipboard support)
 - tmux (for tmux buffer support)
